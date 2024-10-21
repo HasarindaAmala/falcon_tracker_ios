@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>io.flutter.embedded_views_preview</key>
+    <true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
     <string>The app uses bluetooth to find, connect and transfer data between different devices</string>
     <key>NSBluetoothPeripheralUsageDescription</key>
@@ -53,5 +55,7 @@
     <string>We need your location to show it on the map.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>We need your location to show it on the map.</string>
+    <key>MAPBOX_ACCESS_TOKEN</key>
+    <string>sk.eyJ1Ijoic3JjLXJvYm90aWNzIiwiYSI6ImNtMmlwaTlpMDBvNnEybHNjdXR5a2JuYm8ifQ.bNIfJyZEkMSUcfNQbqE8Qw</string>
 </dict>
 </plist>

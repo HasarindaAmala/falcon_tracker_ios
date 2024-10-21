@@ -21,7 +21,7 @@
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
+            android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
             <intent-filter>
@@ -34,6 +34,9 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data
+            android:name="com.mapbox.token"
+            android:value="sk.eyJ1Ijoic3JjLXJvYm90aWNzIiwiYSI6ImNtMmlwaTlpMDBvNnEybHNjdXR5a2JuYm8ifQ.bNIfJyZEkMSUcfNQbqE8Qw" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

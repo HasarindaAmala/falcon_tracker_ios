@@ -1,7 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+
+
+import 'dart:ui';
+
 
 import 'package:falcon_tracker/Controllers/connectionController.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
@@ -12,10 +18,12 @@ import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'Controllers/FileHandlingController.dart';
 import 'downloadScreen.dart';
 import 'package:flutter_beep/flutter_beep.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as map;
 
 
 
-List<Marker> markers = [];
+
+
 
 class connectionScreen extends StatefulWidget {
   const connectionScreen({super.key});
@@ -41,10 +49,12 @@ class _connectionScreenState extends State<connectionScreen>
       settings: FMTCTileProviderSettings(
     behavior: CacheBehavior.onlineFirst,
   ));
-
+  map.MapboxMap? mapboxMap;
+  map.PointAnnotationManager? pointAnnotationManager;
   @override
   void initState() {
     // TODO: implement initState
+
     modeChange = StreamController<bool>.broadcast();
     connectionControll.destController = StreamController<LatLng>.broadcast();
     connectionControll.ValuesController = StreamController<List<double>>.broadcast();
@@ -54,6 +64,7 @@ class _connectionScreenState extends State<connectionScreen>
       duration: const Duration(milliseconds: 900),
       vsync: this,
     );
+    //String accessToken = const String.fromEnvironment('pk.eyJ1Ijoic3JjLXJvYm90aWNzIiwiYSI6ImNtMmlwNWN1dTBpcW4ybG9va3hxNjVmaWYifQ.LEmyaU8wO_b-68ZVAyMOfQ');
 
     // Define the color animation (from white to red and back to white)
     _animation = ColorTween(
@@ -100,6 +111,68 @@ class _connectionScreenState extends State<connectionScreen>
     precacheImage(const AssetImage("assets/eagle.gif"), context);
   }
 
+
+  void _add3DTerrain() async {
+    if (mapboxMap == null) return;
+
+    // Add DEM source
+    var demSource = json.encode({
+      'type': 'raster-dem',
+      'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+      'tileSize': 512,
+      'maxzoom': 14,
+    });
+    await mapboxMap!.style.addStyleSource("mapbox-dem", demSource);
+
+    // Set terrain
+    var terrain = json.encode({
+      'source': 'mapbox-dem',
+      'exaggeration': 1.5,
+    });
+    await mapboxMap!.style.setStyleTerrain(terrain);
+  }
+  void _onStyleLoaded(map.StyleLoadedEventData styleLoadedEventData) {
+    _add3DTerrain();
+  }
+  _onMapCreated(map.MapboxMap mapboxMap) async {
+    this.mapboxMap = mapboxMap;
+    pointAnnotationManager =
+        await mapboxMap.annotations.createPointAnnotationManager();
+
+
+    // Set the initial camera position using Point
+    mapboxMap.setCamera(
+      map.CameraOptions(
+        center: map.Point(coordinates: map.Position( 79.8807387,6.9142004)), // Using Point constructor
+        zoom: 14.0,
+        pitch: 80.0, // Set pitch to 45 degrees for a 3D effect
+        bearing: 41.0, // Adjust bearing as needed
+      ),
+    );
+    mapboxMap.loadStyleURI(map.MapboxStyles.SATELLITE);
+    // mapboxMap.set3dBuildingsVisibility(true);
+    // mapboxMap.setTerrainVisibility(true);
+
+    // Load the image from assets
+    final ByteData bytes = await rootBundle.load('assets/arrow.png');
+    final Uint8List imageData = bytes.buffer.asUint8List();
+
+    map.PointAnnotationOptions pointAnnotationOptions = map.PointAnnotationOptions(
+
+        geometry: map.Point(coordinates: map.Position(79.8807387,6.9142004)), // Example coordinates
+
+        image: imageData,
+
+        iconSize: 3.0
+
+    );
+    pointAnnotationManager?.create(pointAnnotationOptions);
+    mapboxMap.loadStyleURI(map.MapboxStyles.STANDARD_SATELLITE);
+
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     double width = MediaQuery.of(context).size.width;
@@ -126,173 +199,181 @@ class _connectionScreenState extends State<connectionScreen>
       // ),
       body: Stack(
         children: [
-          FlutterMap(
-              options: MapOptions(
-                backgroundColor: Colors.black,
-                initialZoom: 13,
-                initialCenter: LatLng(location!.latitude, location!.longitude),
-                //widget.data == "Sri lanka" ?  LatLng(6.8361301, 79.9216126):(widget.data == "UAE" ? LatLng(23.2365, 54.5549):LatLng(35.2365, -100.5549)),
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  // Other config parameters
-                  tileProvider: tileProvider,
-                ),
-                // MarkerLayer(
-                //   markers: [
-                //     Marker(
-                //       width: 80.0,
-                //       height: 80.0,
-                //       point: LatLng(location!.latitude,
-                //           location!.longitude), // Example marker at Dubai, UAE
-                //       child: const Icon(
-                //         Icons.not_listed_location,
-                //         color: Colors.blue,
-                //         size: 40.0,
-                //       ),
-                //     ),
-                //   ],
-                // ),
-                StreamBuilder(
-                    stream: connectionControll.destController?.stream,
-                    builder: (context, snapshot) {
+          map.MapWidget(
 
-                      if (snapshot.hasData) {
-                        FlutterBeep.playSysSound(iOSSoundIDs.KeyPressed1);
-                        if (snapshot.data!.longitude == 0 &&
-                            snapshot.data!.latitude == 0) {
-                          return Center(
-                            child: Container(
-                              color: Colors.red.withOpacity(0.4),
-                              width: width * 0.8,
-                              height: height * 0.1,
-                              child: const Center(
-                                child: Text("GPS is not Locked!"),
-                              ),
-                            ),
-                          );
-                        } else {
-                          markerAdd(snapshot.data!.latitude,
-                              snapshot.data!.longitude);
-                          return StreamBuilder(
-                              stream: modeChange.stream,
-                              initialData: true,
-                              builder: (context, data) {
-                                print(data.data);
-                                if (data.data == true || data.data == null) {
-                                  return Stack(
-                                    children: [
-                                      PolylineLayer(
-                                        polylines: [
-                                          Polyline(
-                                            points: [
-                                              LatLng(location!.latitude, location!.longitude),
-                                              LatLng(snapshot.data!.latitude,
-                                                  snapshot.data!.longitude),
-                                            ],
-                                            pattern:
-                                                const StrokePattern.dotted(),
-                                            strokeWidth: 3.0,
-                                            color: Colors.black,
-                                          ),
-                                        ],
-                                      ),
-                                      MarkerLayer(
-                                        markers: [
-                                          Marker(
-                                            width: 80.0,
-                                            height: 80.0,
-                                            point: LatLng(location!.latitude,
-                                                location!.longitude), // Example marker at Dubai, UAE
-                                            child:Image(image: AssetImage("assets/arrow.png"))
-                                          ),
+            onMapCreated: _onMapCreated,
+            onStyleLoadedListener: _onStyleLoaded,
 
-                                          Marker(
-                                              width: 80.0,
-                                              height: 80.0,
-                                              point: LatLng(
-                                                  snapshot.data!.latitude,
-                                                  snapshot.data!.longitude),
-                                              child: StreamBuilder(
-                                                  stream: connectionControll
-                                                      .ValuesController.stream,
-                                                  builder: (context, snapshot) {
-                                                    if (snapshot.hasData) {
-                                                      return Transform.rotate(
-                                                        angle:
-                                                            snapshot.data![2] *
-                                                                (pi / 180),
-                                                        child: Icon(
-                                                          Icons
-                                                              .circle,
-                                                          size: width * 0.08,
-                                                          color:
-                                                              Colors.blue,
-                                                        ),
-                                                      );
-                                                    } else {
-                                                      return Icon(
-                                                        Icons
-                                                            .circle,
-                                                        size: width * 0.08,
-                                                        color: Colors.blue,
-                                                      );
-                                                    }
-                                                  })),
+          ),
 
-                                          // Add more markers here
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                } else {
-                                  return Stack(
-                                    children: [
-                                      // PolylineLayer(
-                                      //   polylines: [
-                                      //     Polyline(
-                                      //       points: [
-                                      //         LatLng(originLat, originLng),
-                                      //         LatLng(snapshot.data!.latitude, snapshot.data!.longitude),
-                                      //
-                                      //       ],
-                                      //       pattern: const StrokePattern.dotted(),
-                                      //       strokeWidth: 3.0,
-                                      //       color: Colors.black,
-                                      //     ),
-                                      //   ],
-                                      // ),
 
-                                      MarkerLayer(
-                                        markers: markers,
-                                      ),
-                                    ],
-                                  );
-                                }
-                              });
-                        }
-                      } else {
-                        return MarkerLayer(
-                          markers: [
-                            Marker(
-                              width: 80.0,
-                              height: 80.0,
-                              point: LatLng(
-                                  location!.latitude,
-                                  location!
-                                      .longitude), // Example marker at Dubai, UAE
-                              child: const Icon(
-                                Icons.not_listed_location,
-                                color: Colors.blue,
-                                size: 40.0,
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-                    }),
-              ]),
+          // FlutterMap(
+          //     options: MapOptions(
+          //       backgroundColor: Colors.black,
+          //       initialZoom: 13,
+          //       initialCenter: LatLng(location!.latitude, location!.longitude),
+          //       //widget.data == "Sri lanka" ?  LatLng(6.8361301, 79.9216126):(widget.data == "UAE" ? LatLng(23.2365, 54.5549):LatLng(35.2365, -100.5549)),
+          //     ),
+          //     children: [
+          //       TileLayer(
+          //         urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          //         // Other config parameters
+          //         tileProvider: tileProvider,
+          //       ),
+          //       // MarkerLayer(
+          //       //   markers: [
+          //       //     Marker(
+          //       //       width: 80.0,
+          //       //       height: 80.0,
+          //       //       point: LatLng(location!.latitude,
+          //       //           location!.longitude), // Example marker at Dubai, UAE
+          //       //       child: const Icon(
+          //       //         Icons.not_listed_location,
+          //       //         color: Colors.blue,
+          //       //         size: 40.0,
+          //       //       ),
+          //       //     ),
+          //       //   ],
+          //       // ),
+          //       StreamBuilder(
+          //           stream: connectionControll.destController?.stream,
+          //           builder: (context, snapshot) {
+          //
+          //             if (snapshot.hasData) {
+          //               FlutterBeep.playSysSound(iOSSoundIDs.KeyPressed1);
+          //               if (snapshot.data!.longitude == 0 &&
+          //                   snapshot.data!.latitude == 0) {
+          //                 return Center(
+          //                   child: Container(
+          //                     color: Colors.red.withOpacity(0.4),
+          //                     width: width * 0.8,
+          //                     height: height * 0.1,
+          //                     child: const Center(
+          //                       child: Text("GPS is not Locked!"),
+          //                     ),
+          //                   ),
+          //                 );
+          //               } else {
+          //                 markerAdd(snapshot.data!.latitude,
+          //                     snapshot.data!.longitude);
+          //                 return StreamBuilder(
+          //                     stream: modeChange.stream,
+          //                     initialData: true,
+          //                     builder: (context, data) {
+          //                       print(data.data);
+          //                       if (data.data == true || data.data == null) {
+          //                         return Stack(
+          //                           children: [
+          //                             PolylineLayer(
+          //                               polylines: [
+          //                                 Polyline(
+          //                                   points: [
+          //                                     LatLng(location!.latitude, location!.longitude),
+          //                                     LatLng(snapshot.data!.latitude,
+          //                                         snapshot.data!.longitude),
+          //                                   ],
+          //                                   pattern:
+          //                                       const StrokePattern.dotted(),
+          //                                   strokeWidth: 3.0,
+          //                                   color: Colors.black,
+          //                                 ),
+          //                               ],
+          //                             ),
+          //                             MarkerLayer(
+          //                               markers: [
+          //                                 Marker(
+          //                                   width: 80.0,
+          //                                   height: 80.0,
+          //                                   point: LatLng(location!.latitude,
+          //                                       location!.longitude), // Example marker at Dubai, UAE
+          //                                   child:Image(image: AssetImage("assets/arrow.png"))
+          //                                 ),
+          //
+          //                                 Marker(
+          //                                     width: 80.0,
+          //                                     height: 80.0,
+          //                                     point: LatLng(
+          //                                         snapshot.data!.latitude,
+          //                                         snapshot.data!.longitude),
+          //                                     child: StreamBuilder(
+          //                                         stream: connectionControll
+          //                                             .ValuesController.stream,
+          //                                         builder: (context, snapshot) {
+          //                                           if (snapshot.hasData) {
+          //                                             return Transform.rotate(
+          //                                               angle:
+          //                                                   snapshot.data![2] *
+          //                                                       (pi / 180),
+          //                                               child: Icon(
+          //                                                 Icons
+          //                                                     .circle,
+          //                                                 size: width * 0.08,
+          //                                                 color:
+          //                                                     Colors.blue,
+          //                                               ),
+          //                                             );
+          //                                           } else {
+          //                                             return Icon(
+          //                                               Icons
+          //                                                   .circle,
+          //                                               size: width * 0.08,
+          //                                               color: Colors.blue,
+          //                                             );
+          //                                           }
+          //                                         })),
+          //
+          //                                 // Add more markers here
+          //                               ],
+          //                             ),
+          //                           ],
+          //                         );
+          //                       } else {
+          //                         return Stack(
+          //                           children: [
+          //                             // PolylineLayer(
+          //                             //   polylines: [
+          //                             //     Polyline(
+          //                             //       points: [
+          //                             //         LatLng(originLat, originLng),
+          //                             //         LatLng(snapshot.data!.latitude, snapshot.data!.longitude),
+          //                             //
+          //                             //       ],
+          //                             //       pattern: const StrokePattern.dotted(),
+          //                             //       strokeWidth: 3.0,
+          //                             //       color: Colors.black,
+          //                             //     ),
+          //                             //   ],
+          //                             // ),
+          //
+          //                             MarkerLayer(
+          //                               markers: markers,
+          //                             ),
+          //                           ],
+          //                         );
+          //                       }
+          //                     });
+          //               }
+          //             } else {
+          //               return MarkerLayer(
+          //                 markers: [
+          //                   Marker(
+          //                     width: 80.0,
+          //                     height: 80.0,
+          //                     point: LatLng(
+          //                         location!.latitude,
+          //                         location!
+          //                             .longitude), // Example marker at Dubai, UAE
+          //                     child: const Icon(
+          //                       Icons.not_listed_location,
+          //                       color: Colors.blue,
+          //                       size: 40.0,
+          //                     ),
+          //                   ),
+          //                 ],
+          //               );
+          //             }
+          //           }),
+          //     ]),
           // Container(
           //   width: width,
           //   height: height,
@@ -591,19 +672,19 @@ class _connectionScreenState extends State<connectionScreen>
       },
     );
   }
-  void markerAdd(double lat, double lng) {
-    print("added data");
-    markers.add(
-      Marker(
-        width: 30.0,
-        height: 30.0,
-        point: LatLng(lat, lng), // Example marker at Dubai, UAE
-        child: const Icon(
-          Icons.circle,
-          color: Colors.redAccent,
-          size: 10.0,
-        ),
-      ),
-    );
-  }
+  // void markerAdd(double lat, double lng) {
+  //   print("added data");
+  //   markers.add(
+  //     Marker(
+  //       width: 30.0,
+  //       height: 30.0,
+  //       point: LatLng(lat, lng), // Example marker at Dubai, UAE
+  //       child: const Icon(
+  //         Icons.circle,
+  //         color: Colors.redAccent,
+  //         size: 10.0,
+  //       ),
+  //     ),
+  //   );
+  // }
 }

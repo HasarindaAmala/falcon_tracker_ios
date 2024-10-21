@@ -5,11 +5,14 @@ import 'package:gif/gif.dart';
 import 'package:get/get.dart';
 import 'Controllers/FileHandlingController.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    MapboxOptions.setAccessToken("pk.eyJ1Ijoic3JjLXJvYm90aWNzIiwiYSI6ImNtMmlwNWN1dTBpcW4ybG9va3hxNjVmaWYifQ.LEmyaU8wO_b-68ZVAyMOfQ");
+
     await FMTCObjectBoxBackend().initialise();
 
     runApp(const homeScreen());
